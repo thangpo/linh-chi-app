@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "961157012101",
+    "project_id": "angelunigreen",
+    "storage_bucket": "angelunigreen.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:961157012101:android:2b81aa81e392186022e7ec",
+        "android_client_info": {
+          "package_name": "com.angelunigreen.hisotech"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDyKUaSYAYYj1l8KNRg9__I5cPwdgT-C_c"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

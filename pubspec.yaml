@@ -1,0 +1,49 @@
+name: hisotech
+description: Flutter Cross-Platform Webview Application made for Flipeverest Company.
+publish_to: 'none'
+
+version: 1.0.0+4
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.2
+  webview_flutter: ^4.13.1
+  onesignal_flutter: ^5.4.1
+  flutter_native_splash: ^2.4.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/
+
+flutter_native_splash:
+
+  # ===== NỀN CHÍNH =====
+  color: "#00B894"
+
+  # ===== LOGO =====
+  image: assets/logo.png
+
+  android: true
+  ios: true
+  web: false
+
+  # ===== ANDROID 12+ =====
+  android_12:
+    image: assets/logo.png
+    color: "#00B894"
+    icon_background_color: "#009F7F"
+
+  # ===== CĂN GIỮA LOGO =====
+  android_gravity: center
+  ios_content_mode: center
+  web_image_mode: center
