@@ -1,39 +1,88 @@
 PODS:
   - Flutter (1.0.0)
-  - OneSignal (3.5.3)
-  - onesignal_flutter (3.0.0):
+  - flutter_native_splash (2.4.3):
     - Flutter
-    - OneSignalXCFramework (= 3.4.4)
-  - OneSignalXCFramework (3.4.4)
-  - webview_flutter (0.0.1):
+  - onesignal_flutter (5.3.4):
     - Flutter
+    - OneSignalXCFramework (= 5.4.1)
+  - OneSignalXCFramework (5.4.1):
+    - OneSignalXCFramework/OneSignalComplete (= 5.4.1)
+  - OneSignalXCFramework/OneSignal (5.4.1):
+    - OneSignalXCFramework/OneSignalCore
+    - OneSignalXCFramework/OneSignalExtension
+    - OneSignalXCFramework/OneSignalLiveActivities
+    - OneSignalXCFramework/OneSignalNotifications
+    - OneSignalXCFramework/OneSignalOSCore
+    - OneSignalXCFramework/OneSignalOutcomes
+    - OneSignalXCFramework/OneSignalUser
+  - OneSignalXCFramework/OneSignalComplete (5.4.1):
+    - OneSignalXCFramework/OneSignal
+    - OneSignalXCFramework/OneSignalInAppMessages
+    - OneSignalXCFramework/OneSignalLocation
+  - OneSignalXCFramework/OneSignalCore (5.4.1)
+  - OneSignalXCFramework/OneSignalExtension (5.4.1):
+    - OneSignalXCFramework/OneSignalCore
+    - OneSignalXCFramework/OneSignalOutcomes
+  - OneSignalXCFramework/OneSignalInAppMessages (5.4.1):
+    - OneSignalXCFramework/OneSignalCore
+    - OneSignalXCFramework/OneSignalNotifications
+    - OneSignalXCFramework/OneSignalOSCore
+    - OneSignalXCFramework/OneSignalOutcomes
+    - OneSignalXCFramework/OneSignalUser
+  - OneSignalXCFramework/OneSignalLiveActivities (5.4.1):
+    - OneSignalXCFramework/OneSignalCore
+    - OneSignalXCFramework/OneSignalOSCore
+    - OneSignalXCFramework/OneSignalUser
+  - OneSignalXCFramework/OneSignalLocation (5.4.1):
+    - OneSignalXCFramework/OneSignalCore
+    - OneSignalXCFramework/OneSignalNotifications
+    - OneSignalXCFramework/OneSignalOSCore
+    - OneSignalXCFramework/OneSignalUser
+  - OneSignalXCFramework/OneSignalNotifications (5.4.1):
+    - OneSignalXCFramework/OneSignalCore
+    - OneSignalXCFramework/OneSignalExtension
+    - OneSignalXCFramework/OneSignalOutcomes
+  - OneSignalXCFramework/OneSignalOSCore (5.4.1):
+    - OneSignalXCFramework/OneSignalCore
+  - OneSignalXCFramework/OneSignalOutcomes (5.4.1):
+    - OneSignalXCFramework/OneSignalCore
+  - OneSignalXCFramework/OneSignalUser (5.4.1):
+    - OneSignalXCFramework/OneSignalCore
+    - OneSignalXCFramework/OneSignalNotifications
+    - OneSignalXCFramework/OneSignalOSCore
+    - OneSignalXCFramework/OneSignalOutcomes
+  - webview_flutter_wkwebview (0.0.1):
+    - Flutter
+    - FlutterMacOS
 
 DEPENDENCIES:
   - Flutter (from `Flutter`)
-  - OneSignal (< 4.0, >= 3.0.0)
+  - flutter_native_splash (from `.symlinks/plugins/flutter_native_splash/ios`)
   - onesignal_flutter (from `.symlinks/plugins/onesignal_flutter/ios`)
-  - webview_flutter (from `.symlinks/plugins/webview_flutter/ios`)
+  - OneSignalXCFramework (= 5.4.1)
+  - webview_flutter_wkwebview (from `.symlinks/plugins/webview_flutter_wkwebview/darwin`)
 
 SPEC REPOS:
   trunk:
-    - OneSignal
     - OneSignalXCFramework
 
 EXTERNAL SOURCES:
   Flutter:
     :path: Flutter
+  flutter_native_splash:
+    :path: ".symlinks/plugins/flutter_native_splash/ios"
   onesignal_flutter:
     :path: ".symlinks/plugins/onesignal_flutter/ios"
-  webview_flutter:
-    :path: ".symlinks/plugins/webview_flutter/ios"
+  webview_flutter_wkwebview:
+    :path: ".symlinks/plugins/webview_flutter_wkwebview/darwin"
 
 SPEC CHECKSUMS:
-  Flutter: 434fef37c0980e73bb6479ef766c45957d4b510c
-  OneSignal: e12773ef3dfc68f42103c8cd28ad50660209528f
-  onesignal_flutter: 6a582e3051074be6d9d129002a93a3bfd04a5b88
-  OneSignalXCFramework: eaf286b7438aa1f030f03e5fa9f1c79ede5d8f04
-  webview_flutter: 3603125dfd3bcbc9d8d418c3f80aeecf331c068b
+  Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
+  flutter_native_splash: c32d145d68aeda5502d5f543ee38c192065986cf
+  onesignal_flutter: d706835865d1adf2f03afc7c7b6d237494e693e3
+  OneSignalXCFramework: 0b85a8d949247f80809a9d5598200cc263591129
+  webview_flutter_wkwebview: 8ebf4fded22593026f7dbff1fbff31ea98573c8d
 
-PODFILE CHECKSUM: e1ce3625e62df025b3e64f8999a17f72687b00ad
+PODFILE CHECKSUM: 498a4ea2283e418bb028a6fb86da074a0300df29
 
-COCOAPODS: 1.10.1
+COCOAPODS: 1.16.2

@@ -1,5 +1,5 @@
 
-#import <OneSignal/OneSignal.h>
+#import <OneSignalFramework/OneSignalFramework.h>
 
 #import "NotificationService.h"
 
