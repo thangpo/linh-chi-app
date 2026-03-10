@@ -1,6 +1,21 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.angelunigreen.hisotech">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.angelunigreen.hisotech">
+
+    <!-- ===== LOCATION PERMISSIONS ===== -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <uses-permission android:name="android.permission.INTERNET"/>
+
+    <!-- Nếu cần background location (Android 10+) -->
+    <!-- <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION"/> -->
     <uses-permission android:name="com.google.android.gms.permission.AD_ID"/>
+
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
+        </intent>
+    </queries>
+
    <application
         android:label="ANGEL LINH CHI"
         android:usesCleartextTraffic="true"

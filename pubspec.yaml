@@ -2,7 +2,7 @@ name: hisotech
 description: Flutter Cross-Platform Webview Application made for Flipeverest Company.
 publish_to: 'none'
 
-version: 1.0.0+5
+version: 1.0.0+6
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -10,10 +10,35 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+
   cupertino_icons: ^1.0.2
   webview_flutter: ^4.13.1
   onesignal_flutter: ^5.4.1
   flutter_native_splash: ^2.4.0
+  google_fonts: ^6.1.0
+  phosphor_flutter: ^2.1.0
+  shimmer: ^3.0.0
+
+  # ===== LOCAL DATABASE =====
+  sqflite: ^2.3.3
+  path_provider: ^2.1.4
+  path: ^1.9.0
+
+  # ===== WEB SCRAPING =====
+  http: ^1.2.2
+  html: ^0.15.4
+
+  # ===== GEO LOCATION =====
+  geolocator: ^11.0.0
+
+  # ===== IMAGE CACHE =====
+  cached_network_image: ^3.3.1
+
+  # ===== LOCAL STORAGE =====
+  shared_preferences: ^2.2.2
+
+  # ===== OPEN LINK =====
+  url_launcher: ^6.2.5
 
 dev_dependencies:
   flutter_test:
@@ -25,25 +50,18 @@ flutter:
   assets:
     - assets/
 
+# ==============================
+# FLUTTER NATIVE SPLASH
+# ==============================
+
 flutter_native_splash:
 
-  # ===== NỀN CHÍNH =====
-  color: "#00B894"
-
-  # ===== LOGO =====
-  image: assets/logo.png
+  # nền splash
+  color: "#16A34A"
 
   android: true
   ios: true
   web: false
 
-  # ===== ANDROID 12+ =====
   android_12:
-    image: assets/logo.png
-    color: "#00B894"
-    icon_background_color: "#009F7F"
-
-  # ===== CĂN GIỮA LOGO =====
-  android_gravity: center
-  ios_content_mode: center
-  web_image_mode: center
+    color: "#16A34A"
