@@ -2,11 +2,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:hisotech/services/database_service.dart';
 import 'package:hisotech/services/scraper_service.dart';
-import 'package:hisotech/view/screens/web_view_screen.dart';
 import 'package:hisotech/view/widgets/member_ranks_widget.dart';
 import 'package:hisotech/view/widgets/category_banners_widget.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:hisotech/view/screens/category_products_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -62,15 +62,20 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  void _openLink(String url, {String title = 'Angel Linh Chi'}) {
+  void _openCategory(String url, String title, Color color) {
     if (url.isEmpty) return;
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => WebViewScreen(url: url, title: title),
+        builder: (_) => CategoryProductsScreen(
+          categoryUrl: url,
+          categoryTitle: title,
+          themeColor: color,
+        ),
       ),
     );
   }
+
 
   Future<void> _loadStats() async {
     final p = await _db.countProducts();
@@ -229,8 +234,18 @@ class _HomeScreenState extends State<HomeScreen> {
                 CategoryBannersWidget(
                   banners: _categoryBanners,
                   isLoading: _isLoadingHome,
-                  onTap: (url, title) => _openLink(url, title: title),
+                  onTap: (url, title) {
+                    // Tìm màu của banner tương ứng
+                    final banner = _categoryBanners.firstWhere(
+                          (b) => b.link == url,
+                      orElse: () => CategoryBanner(
+                        title: title, imageUrl: '', color: const Color(0xFF16A34A), link: url,
+                      ),
+                    );
+                    _openCategory(url, title, banner.color);
+                  },
                 ),
+
 
                 const SizedBox(height: 24),
                 _buildSectionHeader(

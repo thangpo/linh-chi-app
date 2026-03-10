@@ -178,19 +178,16 @@ class WebScraperService {
         : _fallbackProducts().map((p) => p.toMap()).toList();
   }
 
-  /// Cào TẤT CẢ sản phẩm từ nhiều trang (tự động phân trang)
   static Future<List<Product>> scrapeAllCosmeticProducts() async {
     final allProducts = <Product>[];
 
     try {
-      // Lấy trang đầu để biết tổng số trang
       final firstResult = await scrapeCosmeticProductsPage(page: 1);
       allProducts.addAll(firstResult.products);
 
       debugPrint(
           '✅ Trang 1/${firstResult.totalPages} — ${firstResult.products.length} sản phẩm');
 
-      // Lấy các trang còn lại song song (nhóm 3 trang để tránh bị block)
       for (int pageStart = 2;
       pageStart <= firstResult.totalPages;
       pageStart += 3) {
@@ -216,7 +213,6 @@ class WebScraperService {
     return allProducts.isNotEmpty ? allProducts : _fallbackProducts();
   }
 
-  /// Cào sản phẩm từ MỘT trang cụ thể (mặc định trang 1)
   static Future<ProductPageResult> scrapeCosmeticProductsPage({
     int page = 1,
   }) async {
@@ -239,8 +235,6 @@ class WebScraperService {
 
       final document = htmlParser.parse(response.body);
       final products = _parseProductCards(document);
-
-      // Lấy thông tin phân trang
       final pagination = _parsePagination(document);
 
       return ProductPageResult(
@@ -260,7 +254,71 @@ class WebScraperService {
     }
   }
 
-  /// Parse danh sách sản phẩm từ document HTML
+  // ────────────────────────────────────────────────────────────────────────────
+  // scrapeProductsByUrl — BUILD PAGE URL đúng chuẩn angelunigreen
+  // Website dùng query param: ?_=<timestamp>&categories[0]=1&stores[0]=-1&page=N
+  // Nhưng thực tế chỉ cần ?page=N là đủ (timestamp không ảnh hưởng kết quả)
+  // ────────────────────────────────────────────────────────────────────────────
+  static Future<ProductPageResult> scrapeProductsByUrl({
+    required String url,
+    int page = 1,
+  }) async {
+    try {
+      // Loại bỏ query params cũ (page=, _=, categories, stores) rồi build lại
+      final baseUrl = _stripPageParam(url);
+      final pageUrl = page > 1 ? '$baseUrl?page=$page' : baseUrl;
+
+      debugPrint('📥 scrapeProductsByUrl → $pageUrl');
+
+      final response = await http
+          .get(Uri.parse(pageUrl), headers: _headers)
+          .timeout(const Duration(seconds: 20));
+
+      if (response.statusCode != 200) {
+        debugPrint('⚠️ HTTP ${response.statusCode} — $pageUrl');
+        return ProductPageResult(
+          products: page == 1 ? _fallbackProducts() : [],
+          currentPage: page,
+          totalPages: 1,
+          totalItems: 0,
+        );
+      }
+
+      final document = htmlParser.parse(response.body);
+      final products = _parseProductCards(document);
+      final pagination = _parsePagination(document);
+
+      debugPrint(
+          '✅ scrapeProductsByUrl trang $page — ${products.length} sản phẩm / tổng ${pagination['totalPages']} trang');
+
+      return ProductPageResult(
+        products: products,
+        currentPage: page,
+        totalPages: pagination['totalPages']!,
+        totalItems: pagination['totalItems']!,
+      );
+    } catch (e) {
+      debugPrint('❌ Lỗi scrapeProductsByUrl trang $page: $e');
+      return ProductPageResult(
+        products: page == 1 ? _fallbackProducts() : [],
+        currentPage: page,
+        totalPages: 1,
+        totalItems: 0,
+      );
+    }
+  }
+
+  /// Xóa toàn bộ query string khỏi URL để build lại sạch
+  static String _stripPageParam(String url) {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return url;
+    // Giữ lại scheme + host + path, bỏ hết query
+    return '${uri.scheme}://${uri.host}${uri.path}';
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // _parseProductCards
+  // ────────────────────────────────────────────────────────────────────────────
   static List<Product> _parseProductCards(dom.Document document) {
     final products = <Product>[];
 
@@ -302,14 +360,11 @@ class WebScraperService {
 
         final originalPrice = elem.querySelector('.old-price')?.text.trim() ?? '';
 
-        // ✅ FIX: dùng .product-sale thay vì .product-discount
         final discountPercent =
             elem.querySelector('.tp-product-badge .product-sale')?.text.trim() ?? '';
 
-        // ✅ FIX: kiểm tra out-of-stock
         final isOutOfStock = elem.querySelector('.product-out-stock') != null;
 
-        // ✅ FIX: sold count clean whitespace/newline
         final soldCount = elem
             .querySelector('.sold-count span')
             ?.text
@@ -318,7 +373,6 @@ class WebScraperService {
             .trim() ??
             '';
 
-        // ✅ FIX: location lấy đúng span, loại bỏ khoảng trắng dư
         final location = elem
             .querySelector('.location > span')
             ?.text
@@ -371,38 +425,49 @@ class WebScraperService {
     return products;
   }
 
-  /// Parse thông tin phân trang
+  // ────────────────────────────────────────────────────────────────────────────
+  // _parsePagination — đọc tổng trang từ .tp-pagination
+  // HTML mẫu: <li class="page-item"><a class="pages-number" ...>37</a></li>
+  // ────────────────────────────────────────────────────────────────────────────
   static Map<String, int> _parsePagination(dom.Document document) {
     int totalPages = 1;
     int totalItems = 0;
 
     try {
-      // Đọc tổng số sản phẩm từ text kết quả
+      // ── Đọc tổng sản phẩm ──
       final resultText =
           document.querySelector('.tp-shop-top-result p')?.text ??
               document.querySelector('.woocommerce-result-count')?.text ??
               '';
-
       final itemMatches = RegExp(r'(\d+)').allMatches(resultText).toList();
       if (itemMatches.isNotEmpty) {
         totalItems = int.tryParse(itemMatches.last.group(0)!) ?? 0;
       }
 
-      // Đọc trang cuối từ pagination
-      final lastPageElem = document.querySelector(
-          '.tp-pagination .page-numbers:not(.next):not(.prev):last-child') ??
-          document.querySelector('.pagination .page-link:last-of-type');
+      // ── Đọc tổng trang từ .tp-pagination ──
+      // Lấy tất cả <a class="pages-number"> trong .tp-pagination
+      // Số lớn nhất chính là tổng số trang
+      final paginationNav = document.querySelector('.tp-pagination') ??
+          document.querySelector('.pagination');
 
-      if (lastPageElem != null) {
-        final pageNum =
-        int.tryParse(lastPageElem.text.trim().replaceAll(RegExp(r'\D'), ''));
-        if (pageNum != null) totalPages = pageNum;
+      if (paginationNav != null) {
+        // Lấy tất cả page number link (không phải nút prev/next)
+        final pageLinks = paginationNav.querySelectorAll('a.pages-number, span.pages-number, span.current');
+        int maxPage = 1;
+        for (final link in pageLinks) {
+          final text = link.text.trim().replaceAll(RegExp(r'[^0-9]'), '');
+          final num = int.tryParse(text);
+          if (num != null && num > maxPage) maxPage = num;
+        }
+        if (maxPage > 1) totalPages = maxPage;
       }
 
-      // Fallback: tính từ tổng sản phẩm / 12 mỗi trang
+      // Fallback: tính từ tổng sản phẩm / 12
       if (totalPages == 1 && totalItems > 12) {
         totalPages = (totalItems / 12).ceil();
       }
+
+      debugPrint('📄 Pagination: trang hiện tại, tổng $totalPages trang, $totalItems sản phẩm');
     } catch (e) {
       debugPrint('⚠️ Lỗi parse phân trang: $e');
     }
@@ -410,9 +475,9 @@ class WebScraperService {
     return {'totalPages': totalPages, 'totalItems': totalItems};
   }
 
-  // ────────────────────────────────────────
+  // ────────────────────────────────────────────────────────────────────────────
   // SLIDER ẢNH TRANG CHỦ
-  // ────────────────────────────────────────
+  // ────────────────────────────────────────────────────────────────────────────
 
   static Future<List<SliderImage>> scrapeSliderImages() async {
     try {
@@ -450,9 +515,9 @@ class WebScraperService {
     }
   }
 
-  // ────────────────────────────────────────
+  // ────────────────────────────────────────────────────────────────────────────
   // CỬA HÀNG
-  // ────────────────────────────────────────
+  // ────────────────────────────────────────────────────────────────────────────
 
   static Future<List<Map<String, dynamic>>> scrapeStores() async {
     try {
@@ -506,10 +571,6 @@ class WebScraperService {
     }
   }
 
-  // ────────────────────────────────────────
-  // HẠNG THÀNH VIÊN
-  // ────────────────────────────────────────
-
   static Future<List<MemberRank>> scrapeMemberRanks() async {
     try {
       final response = await http
@@ -559,10 +620,6 @@ class WebScraperService {
     }
   }
 
-  // ────────────────────────────────────────
-  // BANNER DANH MỤC
-  // ────────────────────────────────────────
-
   static Future<List<CategoryBanner>> scrapeCategoryBanners() async {
     try {
       final response = await http
@@ -590,9 +647,8 @@ class WebScraperService {
             '';
         final imgTag =
         elem.querySelector('.ecommerce-modern-categories__thumb img');
-        final imageUrl = imgTag?.attributes['src'] ??
-            imgTag?.attributes['data-src'] ??
-            '';
+        final imageUrl =
+            imgTag?.attributes['src'] ?? imgTag?.attributes['data-src'] ?? '';
         final link = elem.querySelector('a')?.attributes['href'] ?? '';
         if (title.isEmpty) continue;
         banners.add(CategoryBanner(
@@ -609,10 +665,6 @@ class WebScraperService {
       return _defaultBanners();
     }
   }
-
-  // ────────────────────────────────────────
-  // HOME DATA GỘP
-  // ────────────────────────────────────────
 
   static Future<HomeData> scrapeHomeData() async {
     try {
@@ -646,7 +698,8 @@ class WebScraperService {
               '950') ??
           950;
       final ranks = <MemberRank>[];
-      final allSlides = document.querySelectorAll('.swiper-slide:not(.swiper-slide-duplicate)');
+      final allSlides = document
+          .querySelectorAll('.swiper-slide:not(.swiper-slide-duplicate)');
       final cards = allSlides.isNotEmpty
           ? allSlides
           .map((s) => s.querySelector('.rank-premium-card'))

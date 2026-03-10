@@ -2,10 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hisotech/services/scraper_service.dart';
 
-// ---------------------------------------------------------------------------
-// CategoryBannersWidget — Layout dạng 2×2 Grid
-// ---------------------------------------------------------------------------
-
 class CategoryBannersWidget extends StatelessWidget {
   final List<CategoryBanner> banners;
   final bool isLoading;
@@ -19,10 +15,6 @@ class CategoryBannersWidget extends StatelessWidget {
     this.onTap,
     this.padding = const EdgeInsets.symmetric(horizontal: 16),
   }) : super(key: key);
-
-  // -------------------------------------------------------------------------
-  // Default / fallback data
-  // -------------------------------------------------------------------------
 
   static List<CategoryBanner> get defaultBanners => [
     CategoryBanner(
@@ -51,17 +43,11 @@ class CategoryBannersWidget extends StatelessWidget {
     ),
   ];
 
-  // -------------------------------------------------------------------------
-  // Build
-  // -------------------------------------------------------------------------
-
   @override
   Widget build(BuildContext context) {
     if (isLoading) return _buildSkeleton();
 
     final displayBanners = banners.isNotEmpty ? banners : defaultBanners;
-
-    // Chia thành từng cặp để tạo hàng 2 cột
     final rows = <List<CategoryBanner>>[];
     for (var i = 0; i < displayBanners.length; i += 2) {
       rows.add([
@@ -96,10 +82,6 @@ class CategoryBannersWidget extends StatelessWidget {
     );
   }
 
-  // -------------------------------------------------------------------------
-  // Skeleton loader
-  // -------------------------------------------------------------------------
-
   Widget _buildSkeleton() {
     return Padding(
       padding: padding,
@@ -131,10 +113,6 @@ class CategoryBannersWidget extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Private: single banner card — Title trên, nút Khám phá dưới
-// ---------------------------------------------------------------------------
-
 class _BannerCard extends StatelessWidget {
   final CategoryBanner banner;
   final void Function(String url, String title)? onTap;
@@ -162,19 +140,14 @@ class _BannerCard extends StatelessWidget {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              // 1. Ảnh nền hoặc gradient màu
               _Background(banner: banner),
-
-              // 2. Overlay gradient giúp chữ dễ đọc
               _FullOverlay(color: banner.color),
 
-              // 3. Nội dung: title trên cùng, nút dưới cùng
               Padding(
                 padding: const EdgeInsets.all(14),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // ── Tên danh mục ──
                     Text(
                       banner.title,
                       style: GoogleFonts.beVietnamPro(
@@ -194,7 +167,6 @@ class _BannerCard extends StatelessWidget {
 
                     const Spacer(),
 
-                    // ── Nút Khám phá ngay ──
                     _ExploreButton(),
                   ],
                 ),
@@ -206,10 +178,6 @@ class _BannerCard extends StatelessWidget {
     );
   }
 }
-
-// ---------------------------------------------------------------------------
-// Sub-widgets
-// ---------------------------------------------------------------------------
 
 class _Background extends StatelessWidget {
   final CategoryBanner banner;
@@ -250,7 +218,6 @@ class _ColorGradient extends StatelessWidget {
   }
 }
 
-/// Overlay gradient từ top xuống bottom giúp title + nút nổi bật trên ảnh
 class _FullOverlay extends StatelessWidget {
   final Color color;
   const _FullOverlay({required this.color});
@@ -261,9 +228,9 @@ class _FullOverlay extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            color.withOpacity(0.50),        // trên: phủ màu thương hiệu
-            Colors.black.withOpacity(0.20), // giữa
-            Colors.black.withOpacity(0.45), // dưới: đậm cho nút
+            color.withOpacity(0.50),
+            Colors.black.withOpacity(0.20),
+            Colors.black.withOpacity(0.45),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomCenter,
