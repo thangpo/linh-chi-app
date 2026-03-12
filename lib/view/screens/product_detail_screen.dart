@@ -102,7 +102,15 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
   console.log('🚀 [JS] Script bắt đầu thực thi...');
 
   // 1. Inject CSS ngay lập tức để ẩn rác
-  var css = 'header, footer, nav, .header-area, .footer-area, .breadcrumb, .breadcrumb__area, .site-footer, .related-products { display: none !important; }';
+  var css = 'header, footer, nav,
+  .header-area, .footer-area,
+  .breadcrumb, .breadcrumb__area,
+  section.breadcrumb__area,
+  .breadcrumb__area.include-bg,
+  .breadcrumb__style-2,
+  .site-footer, .related-products {
+    display: none !important;
+  }';
   var style = document.createElement('style');
   style.textContent = css;
   document.head.appendChild(style);
