@@ -213,6 +213,48 @@ class WebScraperService {
     return allProducts.isNotEmpty ? allProducts : _fallbackProducts();
   }
 
+  static Future<Map<String, int>> scrapeHeaderBadges() async {
+    try {
+      final response = await http
+          .get(Uri.parse(websiteUrl), headers: _headers)
+          .timeout(const Duration(seconds: 15));
+
+      if (response.statusCode != 200) {
+        return {'wishlist': 0, 'cart': 0, 'notif': 0};
+      }
+
+      final document = htmlParser.parse(response.body);
+
+      // Lấy tất cả badge elements trong header
+      final allBadges = document.querySelectorAll('.tp-header-action-badge');
+
+      int wishlist = 0;
+      int cart = 0;
+      int notif = 0;
+
+      for (final badge in allBadges) {
+        final bbValue = badge.attributes['data-bb-value'] ?? '';
+        final count = int.tryParse(badge.text.trim()) ?? 0;
+
+        if (bbValue == 'wishlist-count') {
+          wishlist = count;
+        } else if (bbValue == 'cart-count') {
+          cart = count;
+        } else if (bbValue.isEmpty) {
+          // Notification badge không có data-bb-value
+          notif = count;
+        }
+      }
+
+      debugPrint('🛒 Cart: $cart | ❤️ Wishlist: $wishlist | 🔔 Notif: $notif');
+
+      return {'wishlist': wishlist, 'cart': cart, 'notif': notif};
+    } catch (e) {
+      debugPrint('❌ Lỗi scrapeHeaderBadges: $e');
+      return {'wishlist': 0, 'cart': 0, 'notif': 0};
+    }
+  }
+
   static Future<ProductPageResult> scrapeCosmeticProductsPage({
     int page = 1,
   }) async {

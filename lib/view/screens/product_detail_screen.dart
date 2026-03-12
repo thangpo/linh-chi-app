@@ -24,11 +24,13 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
 
-  final Color _green = const Color(0xFF00B894);
+  final Color _green = const Color(0xFF16A34A);
 
   @override
   void initState() {
     super.initState();
+
+    debugPrint('🚀 [System] Khởi tạo màn hình chi tiết sản phẩm...');
 
     _isFavorite = (widget.product['isFavorite'] as int?) == 1;
 
@@ -37,17 +39,22 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
       duration: const Duration(milliseconds: 400),
     );
 
-    _fadeAnimation =
-        CurvedAnimation(parent: _fadeController, curve: Curves.easeOut);
+    _fadeAnimation = CurvedAnimation(parent: _fadeController, curve: Curves.easeOut);
 
     final productUrl = widget.product['productUrl'] as String? ?? '';
 
     _webViewController = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(Colors.white)
+    // Hứng log từ trình duyệt Web
+      ..setOnConsoleMessage((JavaScriptConsoleMessage message) {
+        debugPrint('🌐 JS_LOG: ${message.message}');
+      })
+    // Kênh giao tiếp giữa Web và Flutter
       ..addJavaScriptChannel(
         'FlutterBridge',
         onMessageReceived: (JavaScriptMessage message) {
+          debugPrint('📡 [Bridge] Nhận tin nhắn từ JS: ${message.message}');
           if (message.message == 'injected' && mounted) {
             setState(() {
               _isLoading = false;
@@ -60,6 +67,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageStarted: (url) {
+            debugPrint('⏳ [WebView] Bắt đầu tải URL: $url');
             setState(() {
               _isLoading = true;
               _isInjected = false;
@@ -69,16 +77,15 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
             if (mounted) setState(() => _loadingProgress = progress);
           },
           onPageFinished: (url) {
+            debugPrint('🏁 [WebView] Tải xong HTML. Đang đợi 500ms để inject...');
             if (!mounted) return;
-            _injectCleanScript();
+            // Delay nhẹ để đảm bảo DOM của website Angel UniGreen đã render ổn định
+            Future.delayed(const Duration(milliseconds: 500), () {
+              _injectCleanScript();
+            });
           },
           onWebResourceError: (error) {
-            if (mounted) {
-              setState(() {
-                _isLoading = false;
-                _isInjected = true;
-              });
-            }
+            debugPrint('❌ [WebView] Lỗi tài nguyên: ${error.description}');
           },
         ),
       )
@@ -88,117 +95,68 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
   }
 
   void _injectCleanScript() {
+    debugPrint('💉 [Flutter] Đang thực thi runJavaScript...');
 
     const script = """
 (function(){
+  console.log('🚀 [JS] Script bắt đầu thực thi...');
 
-function clean(){
+  // 1. Inject CSS ngay lập tức để ẩn rác
+  var css = 'header, footer, nav, .header-area, .footer-area, .breadcrumb, .breadcrumb__area, .site-footer, .related-products { display: none !important; }';
+  var style = document.createElement('style');
+  style.textContent = css;
+  document.head.appendChild(style);
+  console.log('✅ [JS] Đã chèn CSS ẩn Header/Footer');
 
-let product = document.querySelector('.tp-product-details-area');
+  function clean(){
+    console.log('🔍 [JS] Đang quét tìm class .tp-product-details-area...');
+    var product = document.querySelector('.tp-product-details-area');
+    
+    if (!product) {
+      console.log('⏳ [JS] Không tìm thấy vùng sản phẩm, thử lại sau 500ms...');
+      setTimeout(clean, 500);
+      return;
+    }
 
-if(!product){
-setTimeout(clean,300);
-return;
-}
+    console.log('🎯 [JS] Đã tìm thấy nội dung! Đang tối ưu UI...');
+    
+    // Tối ưu body
+    document.body.style.margin = '0';
+    document.body.style.padding = '0';
+    document.body.style.background = 'white';
 
-/* Ẩn layout website */
-[
-'header',
-'footer',
-'nav',
-'.header-area',
-'.footer-area',
-'.breadcrumb',
-'.tp-product-details-breadcrumb',
-'.related-products',
-'.upsell-products',
-'.cross-sell',
-'.bb-social-sharing',
-'.comments-area',
-'.woocommerce-Reviews',
-'.product-reviews',
-'.site-footer'
-].forEach(sel=>{
-document.querySelectorAll(sel).forEach(e=>{
-e.style.display='none';
-});
-});
+    // Tạo Sticky Bar Mua Hàng
+    var btn = document.querySelector('.single_add_to_cart_button');
+    if (btn) {
+      console.log('🛒 [JS] Đã tìm thấy nút Add to Cart gốc');
+      var bar = document.createElement('div');
+      bar.style = 'position:fixed;bottom:0;left:0;right:0;background:white;padding:12px;box-shadow:0 -3px 10px rgba(0,0,0,0.1);z-index:9999;display:flex;gap:10px;';
+      
+      var buy = btn.cloneNode(true);
+      buy.style = 'flex:1;height:50px;border-radius:8px;font-weight:700;background:#00B894;color:white;border:none;';
+      buy.onclick = function(){ btn.click(); };
+      
+      bar.appendChild(buy);
+      document.body.appendChild(bar);
+      product.style.paddingBottom = '90px';
+    }
 
-/* tối ưu body */
-document.body.style.margin='0';
-document.body.style.padding='0';
-document.body.style.background='white';
+    // Gửi tín hiệu hoàn tất về Flutter
+    if (window.FlutterBridge) {
+      console.log('📡 [JS] Đang gửi tín hiệu "injected" về Flutter...');
+      window.FlutterBridge.postMessage('injected');
+    } else {
+      console.error('❌ [JS] FlutterBridge không tồn tại!');
+    }
+  }
 
-/* tối ưu container */
-document.querySelectorAll('.container').forEach(e=>{
-e.style.maxWidth='100%';
-e.style.padding='12px';
-});
-
-/* tối ưu ảnh */
-document.querySelectorAll('img').forEach(img=>{
-img.style.maxWidth='100%';
-img.style.height='auto';
-img.style.borderRadius='12px';
-});
-
-/* ===== Sticky add to cart ===== */
-
-let btn = document.querySelector('.single_add_to_cart_button');
-
-if(btn){
-
-let bar = document.createElement('div');
-
-bar.id='flutter-buy-bar';
-
-bar.style.cssText = `
-position:fixed;
-bottom:0;
-left:0;
-right:0;
-background:white;
-padding:12px;
-box-shadow:0 -3px 10px rgba(0,0,0,0.1);
-z-index:9999;
-display:flex;
-gap:10px;
-`;
-
-let buy = btn.cloneNode(true);
-
-buy.style.flex='1';
-buy.style.height='50px';
-buy.style.borderRadius='8px';
-buy.style.fontWeight='700';
-
-bar.appendChild(buy);
-
-document.body.appendChild(bar);
-
-/* click clone button => click original */
-
-buy.onclick=function(){
-btn.click();
-}
-
-}
-
-/* padding bottom để không che content */
-
-product.style.paddingBottom='90px';
-
-FlutterBridge.postMessage('injected');
-
-}
-
-setTimeout(clean,700);
-
+  clean();
 })();
 """;
 
-    _webViewController.runJavaScript(script);
-
+    _webViewController.runJavaScript(script).catchError((e) {
+      debugPrint('❌ [Flutter] Lỗi thực thi JS: $e');
+    });
   }
 
   @override
@@ -208,6 +166,7 @@ setTimeout(clean,700);
   }
 
   Future<void> _reload() async {
+    debugPrint('🔄 [Flutter] Đang tải lại trang...');
     setState(() {
       _isInjected = false;
       _isLoading = true;
@@ -218,7 +177,7 @@ setTimeout(clean,700);
 
   @override
   Widget build(BuildContext context) {
-    final productName = widget.product['name'] as String? ?? 'Sản phẩm';
+    final productName = widget.product['name'] as String? ?? 'Chi tiết sản phẩm';
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -226,32 +185,25 @@ setTimeout(clean,700);
         child: Column(
           children: [
             _buildAppBar(productName),
-
             if (_isLoading)
-              TweenAnimationBuilder<double>(
-                tween: Tween(begin: 0, end: _loadingProgress / 100),
-                duration: const Duration(milliseconds: 200),
-                builder: (_, value, __) => LinearProgressIndicator(
-                  value: value == 0 ? null : value,
-                  minHeight: 3,
-                  backgroundColor: Colors.grey[100],
-                  valueColor: AlwaysStoppedAnimation<Color>(_green),
-                ),
+              LinearProgressIndicator(
+                value: _loadingProgress / 100,
+                minHeight: 3,
+                backgroundColor: Colors.grey[100],
+                valueColor: AlwaysStoppedAnimation<Color>(_green),
               ),
-
             Expanded(
               child: Stack(
                 children: [
                   Opacity(
                     opacity: _isInjected ? 1.0 : 0.0,
                     child: FadeTransition(
-                      opacity: _isInjected
-                          ? _fadeAnimation
-                          : const AlwaysStoppedAnimation(0.0),
+                      opacity: _fadeAnimation,
                       child: WebViewWidget(controller: _webViewController),
                     ),
                   ),
-                  if (!_isInjected) _buildLoadingOverlay(),
+                  if (!_isInjected)
+                    const Center(child: CircularProgressIndicator(color: Color(0xFF00B894))),
                 ],
               ),
             ),
@@ -263,73 +215,38 @@ setTimeout(clean,700);
 
   Widget _buildAppBar(String productName) {
     return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       decoration: BoxDecoration(
         color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.06),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          )
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
+      ),
+      child: Row(
+        children: [
+          _iconBtn(icon: PhosphorIconsBold.arrowLeft, onTap: () => Navigator.pop(context)),
+          const SizedBox(width: 4),
+          Expanded(
+            child: Text(
+              productName,
+              style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.bold),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          _iconBtn(
+            icon: _isFavorite ? PhosphorIconsFill.heart : PhosphorIconsRegular.heart,
+            color: _isFavorite ? Colors.red : Colors.grey[600],
+            onTap: () => setState(() => _isFavorite = !_isFavorite),
+          ),
+          _iconBtn(icon: PhosphorIconsBold.arrowClockwise, onTap: _reload),
         ],
       ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-        child: Row(
-          children: [
-            _iconBtn(
-              icon: PhosphorIconsBold.arrowLeft,
-              onTap: () => Navigator.pop(context),
-            ),
-            const SizedBox(width: 4),
-            Expanded(
-              child: Text(
-                productName,
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            _iconBtn(
-              icon: _isFavorite
-                  ? PhosphorIconsFill.heart
-                  : PhosphorIconsRegular.heart,
-              color: _isFavorite ? Colors.red : Colors.grey[600],
-              onTap: () => setState(() => _isFavorite = !_isFavorite),
-            ),
-            _iconBtn(
-              icon: PhosphorIconsBold.arrowClockwise,
-              onTap: _reload,
-            ),
-          ],
-        ),
-      ),
     );
   }
 
-  Widget _buildLoadingOverlay() {
-    return Container(
-      color: Colors.white,
-      child: const Center(
-        child: CircularProgressIndicator(),
-      ),
-    );
-  }
-
-  Widget _iconBtn({
-    required IconData icon,
-    Color? color,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.all(8),
-        child: Icon(icon, size: 22, color: color ?? Colors.grey),
-      ),
+  Widget _iconBtn({required IconData icon, Color? color, required VoidCallback onTap}) {
+    return IconButton(
+      icon: Icon(icon, size: 22, color: color ?? Colors.grey[700]),
+      onPressed: onTap,
     );
   }
 }
