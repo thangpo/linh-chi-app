@@ -18,6 +18,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
 
   bool _isLoading = true;
   int _loadingProgress = 0;
+  bool _isInjected = false;
   bool _isFavorite = false;
 
   late AnimationController _fadeController;
@@ -44,34 +45,160 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
     _webViewController = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(Colors.white)
+      ..addJavaScriptChannel(
+        'FlutterBridge',
+        onMessageReceived: (JavaScriptMessage message) {
+          if (message.message == 'injected' && mounted) {
+            setState(() {
+              _isLoading = false;
+              _isInjected = true;
+            });
+            _fadeController.forward();
+          }
+        },
+      )
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageStarted: (url) {
-            if (mounted) {
-              setState(() {
-                _isLoading = true;
-                _loadingProgress = 0;
-              });
-            }
+            setState(() {
+              _isLoading = true;
+              _isInjected = false;
+            });
           },
           onProgress: (progress) {
             if (mounted) setState(() => _loadingProgress = progress);
           },
           onPageFinished: (url) {
             if (!mounted) return;
-
-            setState(() => _isLoading = false);
-
-            _fadeController.forward();
+            _injectCleanScript();
           },
           onWebResourceError: (error) {
-            if (mounted) setState(() => _isLoading = false);
+            if (mounted) {
+              setState(() {
+                _isLoading = false;
+                _isInjected = true;
+              });
+            }
           },
         ),
       )
       ..loadRequest(Uri.parse(
         productUrl.isNotEmpty ? productUrl : 'https://angelunigreen.com.vn',
       ));
+  }
+
+  void _injectCleanScript() {
+
+    const script = """
+(function(){
+
+function clean(){
+
+let product = document.querySelector('.tp-product-details-area');
+
+if(!product){
+setTimeout(clean,300);
+return;
+}
+
+/* Ẩn layout website */
+[
+'header',
+'footer',
+'nav',
+'.header-area',
+'.footer-area',
+'.breadcrumb',
+'.tp-product-details-breadcrumb',
+'.related-products',
+'.upsell-products',
+'.cross-sell',
+'.bb-social-sharing',
+'.comments-area',
+'.woocommerce-Reviews',
+'.product-reviews',
+'.site-footer'
+].forEach(sel=>{
+document.querySelectorAll(sel).forEach(e=>{
+e.style.display='none';
+});
+});
+
+/* tối ưu body */
+document.body.style.margin='0';
+document.body.style.padding='0';
+document.body.style.background='white';
+
+/* tối ưu container */
+document.querySelectorAll('.container').forEach(e=>{
+e.style.maxWidth='100%';
+e.style.padding='12px';
+});
+
+/* tối ưu ảnh */
+document.querySelectorAll('img').forEach(img=>{
+img.style.maxWidth='100%';
+img.style.height='auto';
+img.style.borderRadius='12px';
+});
+
+/* ===== Sticky add to cart ===== */
+
+let btn = document.querySelector('.single_add_to_cart_button');
+
+if(btn){
+
+let bar = document.createElement('div');
+
+bar.id='flutter-buy-bar';
+
+bar.style.cssText = `
+position:fixed;
+bottom:0;
+left:0;
+right:0;
+background:white;
+padding:12px;
+box-shadow:0 -3px 10px rgba(0,0,0,0.1);
+z-index:9999;
+display:flex;
+gap:10px;
+`;
+
+let buy = btn.cloneNode(true);
+
+buy.style.flex='1';
+buy.style.height='50px';
+buy.style.borderRadius='8px';
+buy.style.fontWeight='700';
+
+bar.appendChild(buy);
+
+document.body.appendChild(bar);
+
+/* click clone button => click original */
+
+buy.onclick=function(){
+btn.click();
+}
+
+}
+
+/* padding bottom để không che content */
+
+product.style.paddingBottom='90px';
+
+FlutterBridge.postMessage('injected');
+
+}
+
+setTimeout(clean,700);
+
+})();
+""";
+
+    _webViewController.runJavaScript(script);
+
   }
 
   @override
@@ -81,6 +208,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
   }
 
   Future<void> _reload() async {
+    setState(() {
+      _isInjected = false;
+      _isLoading = true;
+    });
     _fadeController.reset();
     await _webViewController.reload();
   }
@@ -111,14 +242,16 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
             Expanded(
               child: Stack(
                 children: [
-                  FadeTransition(
-                    opacity: _isLoading
-                        ? const AlwaysStoppedAnimation(0.0)
-                        : _fadeAnimation,
-                    child: WebViewWidget(controller: _webViewController),
+                  Opacity(
+                    opacity: _isInjected ? 1.0 : 0.0,
+                    child: FadeTransition(
+                      opacity: _isInjected
+                          ? _fadeAnimation
+                          : const AlwaysStoppedAnimation(0.0),
+                      child: WebViewWidget(controller: _webViewController),
+                    ),
                   ),
-                  if (_isLoading && _loadingProgress < 30)
-                    _buildLoadingOverlay(),
+                  if (!_isInjected) _buildLoadingOverlay(),
                 ],
               ),
             ),
@@ -127,8 +260,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
       ),
     );
   }
-
-  // APPBAR
 
   Widget _buildAppBar(String productName) {
     return Container(
@@ -152,28 +283,14 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
             ),
             const SizedBox(width: 4),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    productName,
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: const Color(0xFF1A2E1A),
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  Text(
-                    'angelunigreen.com.vn',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 10,
-                      color: Colors.grey[400],
-                    ),
-                  ),
-                ],
+              child: Text(
+                productName,
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
             _iconBtn(
@@ -193,66 +310,14 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
     );
   }
 
-  // LOADING
-
   Widget _buildLoadingOverlay() {
     return Container(
       color: Colors.white,
-      width: double.infinity,
-      height: double.infinity,
-      child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: _green.withOpacity(0.08),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                PhosphorIconsFill.leaf,
-                color: Color(0xFF00B894),
-                size: 40,
-              ),
-            ),
-            const SizedBox(height: 20),
-            Text(
-              'Đang tải sản phẩm...',
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: const Color(0xFF1A2E1A),
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Vui lòng đợi trong giây lát',
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 12,
-                color: Colors.grey[400],
-              ),
-            ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: 120,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: LinearProgressIndicator(
-                  backgroundColor: Colors.grey[100],
-                  valueColor:
-                  const AlwaysStoppedAnimation<Color>(Color(0xFF00B894)),
-                  minHeight: 4,
-                ),
-              ),
-            ),
-          ],
-        ),
+      child: const Center(
+        child: CircularProgressIndicator(),
       ),
     );
   }
-
-  // ICON BUTTON
 
   Widget _iconBtn({
     required IconData icon,
@@ -263,7 +328,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
       onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.all(8),
-        child: Icon(icon, size: 22, color: color ?? Colors.grey[700]),
+        child: Icon(icon, size: 22, color: color ?? Colors.grey),
       ),
     );
   }
