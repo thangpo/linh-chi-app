@@ -14,7 +14,12 @@ class DatabaseService {
     if (_isInitialized) return;
     final docDir = await getApplicationDocumentsDirectory();
     final dbPath = '${docDir.path}/angel_linh_chi.db';
-    _database = await openDatabase(dbPath, version: 1, onCreate: _createTables);
+    _database = await openDatabase(
+      dbPath,
+      version: 2,
+      onCreate: _createTables,
+      onUpgrade: _onUpgrade,
+    );
     _isInitialized = true;
   }
 
@@ -26,11 +31,21 @@ class DatabaseService {
         price TEXT,
         description TEXT,
         imageUrl TEXT,
+        productUrl TEXT,
         category TEXT,
+        originalPrice TEXT,
+        discountPercent TEXT,
+        soldCount TEXT,
+        location TEXT,
+        ratingText TEXT,
+        isOutOfStock INTEGER DEFAULT 0,
+        sku TEXT,
         isFavorite INTEGER DEFAULT 0,
         createdAt TEXT
       )
     ''');
+
+    await _ensureProductColumns(db);
     await db.execute('''
       CREATE TABLE IF NOT EXISTS stores (
         id TEXT PRIMARY KEY,
@@ -45,12 +60,49 @@ class DatabaseService {
     ''');
   }
 
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await _ensureProductColumns(db);
+    }
+  }
+
+  Future<void> _ensureProductColumns(Database db) async {
+    final info = await db.rawQuery("PRAGMA table_info(products)");
+    final existing = info
+        .map((row) => row['name']?.toString() ?? '')
+        .toSet();
+
+    final columns = <String, String>{
+      'productUrl': 'TEXT',
+      'originalPrice': 'TEXT',
+      'discountPercent': 'TEXT',
+      'soldCount': 'TEXT',
+      'location': 'TEXT',
+      'ratingText': 'TEXT',
+      'isOutOfStock': 'INTEGER DEFAULT 0',
+      'sku': 'TEXT',
+    };
+
+    for (final entry in columns.entries) {
+      if (!existing.contains(entry.key)) {
+        await db.execute(
+          'ALTER TABLE products ADD COLUMN ${entry.key} ${entry.value}',
+        );
+      }
+    }
+  }
+
   Future<void> saveProducts(List<Map<String, dynamic>> products) async {
     await _database.delete('products');
+    final batch = _database.batch();
     for (var p in products) {
-      await _database.insert('products', p,
-          conflictAlgorithm: ConflictAlgorithm.replace);
+      batch.insert(
+        'products',
+        p,
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
     }
+    await batch.commit(noResult: true);
   }
 
   Future<void> saveStores(List<Map<String, dynamic>> stores) async {

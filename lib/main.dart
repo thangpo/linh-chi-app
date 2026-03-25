@@ -7,7 +7,6 @@ import 'package:hisotech/view/screens/products_screen.dart';
 import 'package:hisotech/view/screens/store_screen.dart';
 import 'package:hisotech/view/screens/profile_screen.dart';
 import 'package:hisotech/view/screens/app_webview.dart';
-import 'package:hisotech/view/screens/loading_screen.dart';
 
 class MyHttpOverrides extends HttpOverrides {
   @override
@@ -60,10 +59,22 @@ class AppStarter extends StatefulWidget {
 class _AppStarterState extends State<AppStarter> {
 
   void _onLoadingFinished() {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const MainNavigation(),
+    Navigator.of(context).pushReplacement(
+      PageRouteBuilder(
+        pageBuilder: (_, __, ___) => const MainNavigation(),
+        transitionDuration: const Duration(milliseconds: 320),
+        reverseTransitionDuration: const Duration(milliseconds: 220),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          final curved = CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutCubic,
+          );
+
+          return FadeTransition(
+            opacity: curved,
+            child: child,
+          );
+        },
       ),
     );
   }
@@ -124,7 +135,7 @@ class _LoadingScreenState extends State<LoadingScreen>
 
     _controller.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
-        widget.onAnimationComplete?.call();
+        widget.onAnimationComplete.call();
       }
     });
   }

@@ -1,8 +1,12 @@
+import 'dart:async';
+
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:hisotech/services/database_service.dart';
 import 'package:hisotech/services/scraper_service.dart';
 import 'package:hisotech/view/screens/product_detail_screen.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 class ProductsScreen extends StatefulWidget {
   const ProductsScreen({Key? key}) : super(key: key);
@@ -11,14 +15,29 @@ class ProductsScreen extends StatefulWidget {
   State<ProductsScreen> createState() => _ProductsScreenState();
 }
 
-class _ProductsScreenState extends State<ProductsScreen> with TickerProviderStateMixin {
+class _ProductsScreenState extends State<ProductsScreen>
+    with TickerProviderStateMixin {
   final _searchController = TextEditingController();
+  final _databaseService = DatabaseService();
+
+  Timer? _searchDebounce;
+
   List<Map<String, dynamic>> _products = [];
   bool _isLoading = false;
-  bool _hasLoaded = false;
+  bool _isRefreshing = false;
   String _loadingMessage = 'Đang kết nối...';
   String _selectedCategory = 'Tất cả';
   String _errorMessage = '';
+  String _searchQuery = '';
+
+  int _productsVersion = 0;
+  int _lastFilterVersion = -1;
+  String _lastFilterCategory = '';
+  String _lastFilterQuery = '';
+  List<Map<String, dynamic>> _filteredCache = const [];
+
+  int _lastCategoryVersion = -1;
+  List<String> _categoriesCache = const ['Tất cả'];
 
   final Color _green = const Color(0xFF16A34A);
   final Color _greenDark = const Color(0xFF15803D);
@@ -49,6 +68,7 @@ class _ProductsScreenState extends State<ProductsScreen> with TickerProviderStat
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _shimmerController.dispose();
     _pulseController.dispose();
     _searchController.dispose();
@@ -56,62 +76,132 @@ class _ProductsScreenState extends State<ProductsScreen> with TickerProviderStat
   }
 
   Future<void> _loadProducts() async {
+    final hadDataBeforeLoad = _products.isNotEmpty;
+
     setState(() {
-      _isLoading = true;
+      _isLoading = !hadDataBeforeLoad;
+      _isRefreshing = hadDataBeforeLoad;
       _errorMessage = '';
-      _loadingMessage = 'Đang kết nối website...';
+      _loadingMessage = hadDataBeforeLoad
+          ? 'Đang cập nhật dữ liệu mới...'
+          : 'Đang kết nối website...';
     });
+
+    if (!hadDataBeforeLoad) {
+      try {
+        final cachedProducts = await _databaseService.getProducts();
+        if (mounted && cachedProducts.isNotEmpty) {
+          setState(() {
+            _setProducts(cachedProducts);
+            _isLoading = false;
+            _isRefreshing = true;
+            _loadingMessage = 'Đang đồng bộ dữ liệu mới từ website...';
+          });
+        }
+      } catch (_) {
+        // Không chặn luồng online
+      }
+    }
 
     try {
       final products = await ScrapingService.scrapeProducts(
         onProgress: (msg) {
-          if (mounted) setState(() => _loadingMessage = msg);
+          if (mounted) {
+            setState(() => _loadingMessage = msg);
+          }
         },
       );
 
-      if (mounted) {
-        setState(() {
-          _products = products;
-          _isLoading = false;
-          _hasLoaded = true;
-          if (products.isEmpty) {
-            _errorMessage = 'Không tìm thấy sản phẩm nào.';
-          }
-        });
+      if (!mounted) return;
+
+      if (products.isNotEmpty) {
+        await _databaseService.saveProducts(products);
       }
+
+      setState(() {
+        _setProducts(products);
+        _isLoading = false;
+        _isRefreshing = false;
+        if (products.isEmpty) {
+          _errorMessage = 'Không tìm thấy sản phẩm nào.';
+        }
+      });
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _hasLoaded = true;
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _isRefreshing = false;
+        if (_products.isEmpty) {
           _errorMessage = 'Lỗi tải dữ liệu: $e';
-        });
-      }
+        }
+      });
+    }
+  }
+
+  void _setProducts(List<Map<String, dynamic>> products) {
+    _products = products;
+    _productsVersion++;
+  }
+
+  void _onSearchChanged(String value) {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 250), () {
+      if (!mounted) return;
+      final query = value.trim().toLowerCase();
+      if (query == _searchQuery) return;
+      setState(() => _searchQuery = query);
+    });
+  }
+
+  void _clearSearch() {
+    _searchDebounce?.cancel();
+    _searchController.clear();
+    if (_searchQuery.isNotEmpty) {
+      setState(() => _searchQuery = '');
     }
   }
 
   List<String> get _categories {
+    if (_lastCategoryVersion == _productsVersion) {
+      return _categoriesCache;
+    }
+
     final cats = <String>{'Tất cả'};
     for (var p in _products) {
       final cat = p['category'] as String? ?? '';
       if (cat.isNotEmpty) cats.add(cat);
     }
-    return cats.toList();
+
+    _categoriesCache = cats.toList();
+    _lastCategoryVersion = _productsVersion;
+    return _categoriesCache;
   }
 
   List<Map<String, dynamic>> get _filtered {
+    if (_lastFilterVersion == _productsVersion &&
+        _lastFilterCategory == _selectedCategory &&
+        _lastFilterQuery == _searchQuery) {
+      return _filteredCache;
+    }
+
     var list = _products;
     if (_selectedCategory != 'Tất cả') {
       list = list.where((p) => p['category'] == _selectedCategory).toList();
     }
-    final q = _searchController.text.trim().toLowerCase();
-    if (q.isNotEmpty) {
+
+    if (_searchQuery.isNotEmpty) {
       list = list.where((p) {
         final name = (p['name'] as String? ?? '').toLowerCase();
-        return name.contains(q);
+        return name.contains(_searchQuery);
       }).toList();
     }
-    return list;
+
+    _lastFilterVersion = _productsVersion;
+    _lastFilterCategory = _selectedCategory;
+    _lastFilterQuery = _searchQuery;
+    _filteredCache = list;
+
+    return _filteredCache;
   }
 
   void _toggleFavorite(Map<String, dynamic> product) {
@@ -120,11 +210,11 @@ class _ProductsScreenState extends State<ProductsScreen> with TickerProviderStat
       if (idx != -1) {
         final current = (_products[idx]['isFavorite'] as int?) == 1;
         _products[idx] = {..._products[idx], 'isFavorite': current ? 0 : 1};
+        _productsVersion++;
       }
     });
   }
 
-  /// ✅ Mở sản phẩm trong app bằng ProductDetailScreen
   void _openProduct(Map<String, dynamic> product) {
     Navigator.push(
       context,
@@ -132,12 +222,12 @@ class _ProductsScreenState extends State<ProductsScreen> with TickerProviderStat
         builder: (_) => ProductDetailScreen(product: product),
       ),
     ).then((result) {
-      // Đồng bộ trạng thái yêu thích khi quay về
       if (result != null && result is Map) {
         final idx = _products.indexWhere((p) => p['id'] == product['id']);
         if (idx != -1 && mounted) {
           setState(() {
             _products[idx] = {..._products[idx], ...result};
+            _productsVersion++;
           });
         }
       }
@@ -146,6 +236,9 @@ class _ProductsScreenState extends State<ProductsScreen> with TickerProviderStat
 
   @override
   Widget build(BuildContext context) {
+    final showInitialLoading = _isLoading && _products.isEmpty;
+    final showError = _errorMessage.isNotEmpty && _products.isEmpty;
+
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
@@ -161,26 +254,24 @@ class _ProductsScreenState extends State<ProductsScreen> with TickerProviderStat
         ),
         centerTitle: true,
         actions: [
-          if (!_isLoading)
-            IconButton(
-              icon: Icon(
-                PhosphorIcons.arrowClockwise(PhosphorIconsStyle.bold),
-                color: Colors.white,
-              ),
-              tooltip: 'Tải lại',
-              onPressed: _loadProducts,
+          IconButton(
+            icon: Icon(
+              PhosphorIcons.arrowClockwise(PhosphorIconsStyle.bold),
+              color: Colors.white,
             ),
+            tooltip: 'Tải lại',
+            onPressed: (_isLoading || _isRefreshing) ? null : _loadProducts,
+          ),
         ],
       ),
       body: Column(
         children: [
-          // ── Search bar ──
           Container(
             color: _green,
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             child: TextField(
               controller: _searchController,
-              onChanged: (_) => setState(() {}),
+              onChanged: _onSearchChanged,
               style: GoogleFonts.plusJakartaSans(fontSize: 14),
               decoration: InputDecoration(
                 hintText: 'Tìm kiếm sản phẩm...',
@@ -195,16 +286,13 @@ class _ProductsScreenState extends State<ProductsScreen> with TickerProviderStat
                 ),
                 suffixIcon: _searchController.text.isNotEmpty
                     ? IconButton(
-                  icon: Icon(
-                    PhosphorIcons.x(PhosphorIconsStyle.bold),
-                    color: Colors.grey[500],
-                    size: 18,
-                  ),
-                  onPressed: () {
-                    _searchController.clear();
-                    setState(() {});
-                  },
-                )
+                        icon: Icon(
+                          PhosphorIcons.x(PhosphorIconsStyle.bold),
+                          color: Colors.grey[500],
+                          size: 18,
+                        ),
+                        onPressed: _clearSearch,
+                      )
                     : null,
                 filled: true,
                 fillColor: Colors.white,
@@ -216,23 +304,29 @@ class _ProductsScreenState extends State<ProductsScreen> with TickerProviderStat
               ),
             ),
           ),
-
-          // ── Category chips ──
           if (!_isLoading && _products.isNotEmpty)
             SizedBox(
               height: 50,
               child: ListView.builder(
                 scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 itemCount: _categories.length,
                 itemBuilder: (ctx, i) {
                   final cat = _categories[i];
                   final selected = cat == _selectedCategory;
                   return GestureDetector(
-                    onTap: () => setState(() => _selectedCategory = cat),
+                    onTap: () {
+                      if (_selectedCategory != cat) {
+                        setState(() => _selectedCategory = cat);
+                      }
+                    },
                     child: Container(
                       margin: const EdgeInsets.only(right: 8),
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: selected ? _green : Colors.white,
                         borderRadius: BorderRadius.circular(20),
@@ -245,7 +339,8 @@ class _ProductsScreenState extends State<ProductsScreen> with TickerProviderStat
                         style: GoogleFonts.plusJakartaSans(
                           color: selected ? Colors.white : Colors.grey[700],
                           fontSize: 12,
-                          fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                          fontWeight:
+                              selected ? FontWeight.w700 : FontWeight.w500,
                         ),
                       ),
                     ),
@@ -253,23 +348,53 @@ class _ProductsScreenState extends State<ProductsScreen> with TickerProviderStat
                 },
               ),
             ),
-
-          // ── Main content ──
+          if (_isRefreshing && _products.isNotEmpty) _buildRefreshingBanner(),
           Expanded(
-            child: _isLoading
+            child: showInitialLoading
                 ? _buildLoadingView()
-                : _errorMessage.isNotEmpty && _products.isEmpty
-                ? _buildErrorView()
-                : _filtered.isEmpty
-                ? _buildEmptyView()
-                : _buildProductGrid(),
+                : showError
+                    ? _buildErrorView()
+                    : _filtered.isEmpty
+                        ? _buildEmptyView()
+                        : _buildProductGrid(),
           ),
         ],
       ),
     );
   }
 
-  // ─── LOADING UI ──────────────────────────────────────────────────────────
+  Widget _buildRefreshingBanner() {
+    return Container(
+      width: double.infinity,
+      color: _green.withOpacity(0.08),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 14,
+            height: 14,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: _green,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              _loadingMessage,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 12,
+                color: _greenDark,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _buildLoadingView() {
     return Column(
@@ -284,7 +409,8 @@ class _ProductsScreenState extends State<ProductsScreen> with TickerProviderStat
                 scale: _pulseAnimation,
                 child: Container(
                   padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(color: _green, shape: BoxShape.circle),
+                  decoration:
+                      BoxDecoration(color: _green, shape: BoxShape.circle),
                   child: Icon(
                     PhosphorIcons.cloudArrowDown(PhosphorIconsStyle.fill),
                     color: Colors.white,
@@ -321,14 +447,10 @@ class _ProductsScreenState extends State<ProductsScreen> with TickerProviderStat
             ],
           ),
         ),
-        AnimatedBuilder(
-          animation: _shimmerController,
-          builder: (_, __) => LinearProgressIndicator(
-            value: null,
-            backgroundColor: Colors.grey[200],
-            valueColor: AlwaysStoppedAnimation<Color>(_green),
-            minHeight: 3,
-          ),
+        LinearProgressIndicator(
+          backgroundColor: Colors.grey[200],
+          valueColor: AlwaysStoppedAnimation<Color>(_green),
+          minHeight: 3,
         ),
         Expanded(
           child: GridView.builder(
@@ -369,14 +491,19 @@ class _ProductsScreenState extends State<ProductsScreen> with TickerProviderStat
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(12)),
                 child: Container(
                   height: 130,
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.centerLeft,
                       end: Alignment.centerRight,
-                      colors: [Colors.grey[200]!, Colors.grey[100]!, Colors.grey[200]!],
+                      colors: [
+                        Colors.grey[200]!,
+                        Colors.grey[100]!,
+                        Colors.grey[200]!
+                      ],
                       stops: stops,
                     ),
                   ),
@@ -427,8 +554,6 @@ class _ProductsScreenState extends State<ProductsScreen> with TickerProviderStat
     );
   }
 
-  // ─── ERROR UI ────────────────────────────────────────────────────────────
-
   Widget _buildErrorView() {
     return Center(
       child: Padding(
@@ -467,7 +592,8 @@ class _ProductsScreenState extends State<ProductsScreen> with TickerProviderStat
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(20),
                 ),
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
               ),
               onPressed: _loadProducts,
               icon: Icon(
@@ -484,8 +610,6 @@ class _ProductsScreenState extends State<ProductsScreen> with TickerProviderStat
       ),
     );
   }
-
-  // ─── EMPTY UI ────────────────────────────────────────────────────────────
 
   Widget _buildEmptyView() {
     return Center(
@@ -507,9 +631,9 @@ class _ProductsScreenState extends State<ProductsScreen> with TickerProviderStat
     );
   }
 
-  // ─── PRODUCT GRID ────────────────────────────────────────────────────────
-
   Widget _buildProductGrid() {
+    final filtered = _filtered;
+
     return Column(
       children: [
         Container(
@@ -525,7 +649,7 @@ class _ProductsScreenState extends State<ProductsScreen> with TickerProviderStat
               ),
               const SizedBox(width: 6),
               Text(
-                '${_filtered.length} sản phẩm',
+                '${filtered.length} sản phẩm',
                 style: GoogleFonts.plusJakartaSans(
                   fontSize: 13,
                   color: Colors.grey[700],
@@ -552,8 +676,8 @@ class _ProductsScreenState extends State<ProductsScreen> with TickerProviderStat
               crossAxisSpacing: 12,
               mainAxisSpacing: 12,
             ),
-            itemCount: _filtered.length,
-            itemBuilder: (ctx, i) => _productCard(_filtered[i]),
+            itemCount: filtered.length,
+            itemBuilder: (ctx, i) => _productCard(filtered[i]),
           ),
         ),
       ],
@@ -570,7 +694,6 @@ class _ProductsScreenState extends State<ProductsScreen> with TickerProviderStat
     final location = product['location'] as String? ?? '';
 
     return GestureDetector(
-      // ✅ Mở ProductDetailScreen thay vì trình duyệt ngoài
       onTap: () => _openProduct(product),
       child: Container(
         decoration: BoxDecoration(
@@ -583,32 +706,33 @@ class _ProductsScreenState extends State<ProductsScreen> with TickerProviderStat
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Image + badges
             Stack(
               children: [
                 ClipRRect(
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                  borderRadius:
+                      const BorderRadius.vertical(top: Radius.circular(12)),
                   child: imageUrl.isNotEmpty
-                      ? Image.network(
-                    imageUrl,
-                    height: 130,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => _imagePlaceholder(),
-                    loadingBuilder: (_, child, progress) {
-                      if (progress == null) return child;
-                      return _imageLoadingPlaceholder(progress);
-                    },
-                  )
+                      ? CachedNetworkImage(
+                          imageUrl: imageUrl,
+                          height: 130,
+                          width: double.infinity,
+                          fit: BoxFit.cover,
+                          placeholder: (_, __) => _imageLoadingPlaceholder(),
+                          errorWidget: (_, __, ___) => _imagePlaceholder(),
+                          memCacheHeight: 300,
+                          memCacheWidth: 300,
+                        )
                       : _imagePlaceholder(),
                 ),
-                // Hết hàng
                 if (isOutOfStock)
                   Positioned(
                     top: 8,
                     left: 8,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.red[400],
                         borderRadius: BorderRadius.circular(4),
@@ -623,13 +747,15 @@ class _ProductsScreenState extends State<ProductsScreen> with TickerProviderStat
                       ),
                     ),
                   ),
-                // Giảm giá
                 if (discountPercent.isNotEmpty && !isOutOfStock)
                   Positioned(
                     top: 8,
                     left: 8,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.red,
                         borderRadius: BorderRadius.circular(4),
@@ -644,7 +770,6 @@ class _ProductsScreenState extends State<ProductsScreen> with TickerProviderStat
                       ),
                     ),
                   ),
-                // Yêu thích
                 Positioned(
                   top: 8,
                   right: 8,
@@ -668,8 +793,6 @@ class _ProductsScreenState extends State<ProductsScreen> with TickerProviderStat
                 ),
               ],
             ),
-
-            // Info
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
@@ -686,7 +809,6 @@ class _ProductsScreenState extends State<ProductsScreen> with TickerProviderStat
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 4),
-                    // Giá
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.baseline,
                       textBaseline: TextBaseline.alphabetic,
@@ -716,12 +838,13 @@ class _ProductsScreenState extends State<ProductsScreen> with TickerProviderStat
                       ],
                     ),
                     const SizedBox(height: 4),
-                    // Đã bán
                     if (soldCount.isNotEmpty)
                       Row(
                         children: [
                           Icon(
-                            PhosphorIcons.shoppingCart(PhosphorIconsStyle.regular),
+                            PhosphorIcons.shoppingCart(
+                              PhosphorIconsStyle.regular,
+                            ),
                             size: 10,
                             color: Colors.grey[500],
                           ),
@@ -735,7 +858,6 @@ class _ProductsScreenState extends State<ProductsScreen> with TickerProviderStat
                           ),
                         ],
                       ),
-                    // Địa điểm
                     if (location.isNotEmpty) ...[
                       const SizedBox(height: 2),
                       Row(
@@ -761,9 +883,11 @@ class _ProductsScreenState extends State<ProductsScreen> with TickerProviderStat
                       ),
                     ],
                     const Spacer(),
-                    // Category chip
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 5,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: _green.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(4),
@@ -791,10 +915,7 @@ class _ProductsScreenState extends State<ProductsScreen> with TickerProviderStat
     );
   }
 
-  Widget _imageLoadingPlaceholder(ImageChunkEvent progress) {
-    final value = progress.expectedTotalBytes != null
-        ? progress.cumulativeBytesLoaded / progress.expectedTotalBytes!
-        : null;
+  Widget _imageLoadingPlaceholder() {
     return Container(
       height: 130,
       width: double.infinity,
@@ -804,7 +925,6 @@ class _ProductsScreenState extends State<ProductsScreen> with TickerProviderStat
           width: 28,
           height: 28,
           child: CircularProgressIndicator(
-            value: value,
             strokeWidth: 2,
             color: _green,
           ),

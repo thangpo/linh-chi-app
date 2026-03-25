@@ -12,17 +12,15 @@ class ProductDetailScreen extends StatefulWidget {
   State<ProductDetailScreen> createState() => _ProductDetailScreenState();
 }
 
-class _ProductDetailScreenState extends State<ProductDetailScreen>
-    with SingleTickerProviderStateMixin {
+class _ProductDetailScreenState extends State<ProductDetailScreen> {
   late final WebViewController _webViewController;
 
   bool _isLoading = true;
   int _loadingProgress = 0;
-  bool _isInjected = false;
   bool _isFavorite = false;
-
-  late AnimationController _fadeController;
-  late Animation<double> _fadeAnimation;
+  bool _showOverlayLoader = true;
+  double _webOpacity = 0;
+  double _overlayOpacity = 1;
 
   final Color _green = const Color(0xFF16A34A);
 
@@ -33,13 +31,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
     debugPrint('🚀 [System] Khởi tạo màn hình chi tiết sản phẩm...');
 
     _isFavorite = (widget.product['isFavorite'] as int?) == 1;
-
-    _fadeController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 400),
-    );
-
-    _fadeAnimation = CurvedAnimation(parent: _fadeController, curve: Curves.easeOut);
 
     final productUrl = widget.product['productUrl'] as String? ?? '';
 
@@ -58,9 +49,14 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
           if (message.message == 'injected' && mounted) {
             setState(() {
               _isLoading = false;
-              _isInjected = true;
+              _webOpacity = 1;
+              _overlayOpacity = 0;
             });
-            _fadeController.forward();
+
+            Future.delayed(const Duration(milliseconds: 260), () {
+              if (!mounted) return;
+              setState(() => _showOverlayLoader = false);
+            });
           }
         },
       )
@@ -70,7 +66,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
             debugPrint('⏳ [WebView] Bắt đầu tải URL: $url');
             setState(() {
               _isLoading = true;
-              _isInjected = false;
+              _showOverlayLoader = true;
+              _webOpacity = 0;
+              _overlayOpacity = 1;
             });
           },
           onProgress: (progress) {
@@ -169,17 +167,17 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
 
   @override
   void dispose() {
-    _fadeController.dispose();
     super.dispose();
   }
 
   Future<void> _reload() async {
     debugPrint('🔄 [Flutter] Đang tải lại trang...');
     setState(() {
-      _isInjected = false;
       _isLoading = true;
+      _showOverlayLoader = true;
+      _webOpacity = 0;
+      _overlayOpacity = 1;
     });
-    _fadeController.reset();
     await _webViewController.reload();
   }
 
@@ -203,15 +201,26 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
             Expanded(
               child: Stack(
                 children: [
-                  Opacity(
-                    opacity: _isInjected ? 1.0 : 0.0,
-                    child: FadeTransition(
-                      opacity: _fadeAnimation,
-                      child: WebViewWidget(controller: _webViewController),
-                    ),
+                  AnimatedOpacity(
+                    opacity: _webOpacity,
+                    duration: const Duration(milliseconds: 260),
+                    curve: Curves.easeOut,
+                    child: WebViewWidget(controller: _webViewController),
                   ),
-                  if (!_isInjected)
-                    const Center(child: CircularProgressIndicator(color: Color(0xFF00B894))),
+                  if (_showOverlayLoader)
+                    AnimatedOpacity(
+                      opacity: _overlayOpacity,
+                      duration: const Duration(milliseconds: 220),
+                      curve: Curves.easeOut,
+                      child: Container(
+                        color: Colors.white,
+                        child: const Center(
+                          child: CircularProgressIndicator(
+                            color: Color(0xFF00B894),
+                          ),
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),

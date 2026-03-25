@@ -139,10 +139,34 @@ class WebScraperService {
     'Accept-Language': 'vi-VN,vi;q=0.9,en;q=0.8',
   };
 
+  static Future<List<Map<String, dynamic>>>? _inFlightScrapeProducts;
+
   static Future<List<Map<String, dynamic>>> scrapeProducts({
     void Function(String message)? onProgress,
-  }) async {
+  }) {
     onProgress?.call('Đang kết nối website...');
+
+    final inFlight = _inFlightScrapeProducts;
+    if (inFlight != null) {
+      onProgress?.call('Đang dùng phiên tải hiện tại...');
+      return inFlight;
+    }
+
+    final future = _scrapeProductsImpl(onProgress: onProgress);
+    _inFlightScrapeProducts = future;
+
+    future.whenComplete(() {
+      if (identical(_inFlightScrapeProducts, future)) {
+        _inFlightScrapeProducts = null;
+      }
+    });
+
+    return future;
+  }
+
+  static Future<List<Map<String, dynamic>>> _scrapeProductsImpl({
+    void Function(String message)? onProgress,
+  }) async {
     final allProducts = <Map<String, dynamic>>[];
 
     try {
