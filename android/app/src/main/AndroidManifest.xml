@@ -55,8 +55,8 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="http" android:host="flipeverest.com" />
-                <data android:scheme="https" android:host="flipeverest.com" />
+                <data android:scheme="http" android:host="angelunigreen.com.vn" />
+                <data android:scheme="https" android:host="angelunigreen.com.vn" />
             </intent-filter>
             <!-- Notification Default icon -->
             <meta-data android:name="com.onesignal.messaging.default_notification_icon"
